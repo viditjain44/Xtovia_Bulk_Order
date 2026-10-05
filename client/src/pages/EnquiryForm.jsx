@@ -155,7 +155,7 @@ export default function EnquiryForm() {
                 id="purpose"
                 name="purpose"
                 maxLength={500}
-                placeholder="e.g. corporate gifting, resale, event"
+                placeholder="e.g. corporate gifting, Family functions, event"
                 value={values.purpose}
                 onChange={handleChange}
                 onBlur={handleBlur}
