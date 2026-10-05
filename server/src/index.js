@@ -1,4 +1,6 @@
-const { app, connectDB, missingConfig } = require("./app");
+const app = require("./app");
+
+const { connectDB, missingConfig } = app;
 
 const missing = missingConfig();
 if (missing.length) {

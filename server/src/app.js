@@ -76,4 +76,7 @@ app.use((error, req, res, next) => {
   res.status(500).json({ message: "Something went wrong. Please try again." });
 });
 
-module.exports = { app, connectDB, missingConfig };
+// Vercel loads this file directly and needs the Express app itself as the export.
+module.exports = app;
+module.exports.connectDB = connectDB;
+module.exports.missingConfig = missingConfig;
