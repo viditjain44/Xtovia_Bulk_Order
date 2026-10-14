@@ -1,6 +1,17 @@
 const app = require("./app");
 
+const express = require("express");
 const { connectDB, missingConfig } = app;
+
+const cors =require("cors");
+
+app.use(cors({
+  origin: "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+app.use(express.json());
 
 const missing = missingConfig();
 if (missing.length) {
