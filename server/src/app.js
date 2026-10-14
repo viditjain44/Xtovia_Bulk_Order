@@ -56,6 +56,12 @@ app.use("/api", async (req, res, next) => {
     res.status(503).json({ message: "We can't reach the database right now. Please try again." });
   }
 });
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Xtovia Bulk Order API is running",
+  });
+});
 
 app.use("/api/enquiries", enquiryRoutes);
 app.use("/api/admin", adminRoutes);
