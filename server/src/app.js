@@ -1,3 +1,4 @@
+
 require("dotenv").config();
 
 const fs = require("fs");
@@ -10,52 +11,82 @@ const enquiryRoutes = require("./routes/enquiries");
 const adminRoutes = require("./routes/admin");
 
 function missingConfig() {
-  return ["MONGODB_URI", "ADMIN_PASSWORD", "JWT_SECRET"].filter((key) => !process.env[key]);
+  return ["MONGODB_URI", "ADMIN_PASSWORD", "JWT_SECRET"].filter(
+    (key) => !process.env[key]
+  );
 }
 
-// Reused across requests so serverless hosts don't open a new connection each time.
+// Reuse the MongoDB connection across serverless invocations.
 let connection = null;
+
 function connectDB() {
   if (!connection) {
     connection = mongoose
-      .connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
+      .connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 10000,
+      })
       .catch((error) => {
         connection = null;
         throw error;
       });
   }
+
   return connection;
 }
 
 const app = express();
 
-// Behind Vercel's proxy the visitor's address arrives in X-Forwarded-For.
-if (process.env.VERCEL) app.set("trust proxy", 1);
+// Configure proxy trust for Vercel.
+if (process.env.VERCEL) {
+  app.set("trust proxy", 1);
+}
 
-// Only needed when the frontend is hosted on a different domain from this API.
-// Accepts one URL or several separated by commas.
-const allowedOrigins = (process.env.FRONTEND_URL || "")
-  .split(",")
-  .map((origin) => origin.trim().replace(/\/+$/, ""))
-  .filter(Boolean);
-if (allowedOrigins.length) app.use("/api", cors({ origin: allowedOrigins }));
+// CORS configuration.
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://xtovia-bulk-order.vercel.app",
+];
 
+app.use(
+  "/api",
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Parse incoming JSON requests.
 app.use(express.json({ limit: "10kb" }));
 
+// Check environment variables and connect to MongoDB for API requests.
 app.use("/api", async (req, res, next) => {
   const missing = missingConfig();
-  if (missing.length) {
-    console.error(`Missing environment variables: ${missing.join(", ")}`);
-    return res.status(500).json({ message: "The server is not configured yet." });
+
+  if (missing.length > 0) {
+    console.error(
+      `Missing environment variables: ${missing.join(", ")}`
+    );
+
+    return res.status(500).json({
+      message: "The server is not configured yet.",
+    });
   }
+
   try {
     await connectDB();
     next();
   } catch (error) {
     console.error("Could not connect to MongoDB:", error.message);
-    res.status(503).json({ message: "We can't reach the database right now. Please try again." });
+
+    return res.status(503).json({
+      message:
+        "We can't reach the database right now. Please try again.",
+    });
   }
 });
+
+// Health-check route.
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -63,26 +94,50 @@ app.get("/", (req, res) => {
   });
 });
 
+// API routes.
 app.use("/api/enquiries", enquiryRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api", (req, res) => res.status(404).json({ message: "Not found." }));
 
-// When run as a normal Node server, it also serves the built React app.
-const clientDist = path.join(__dirname, "..", "..", "client", "dist");
-if (!process.env.VERCEL && fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
-  app.get("*", (req, res) => res.sendFile(path.join(clientDist, "index.html")));
-}
-
-app.use((error, req, res, next) => {
-  if (error.type === "entity.parse.failed") {
-    return res.status(400).json({ message: "Invalid request." });
-  }
-  console.error(error);
-  res.status(500).json({ message: "Something went wrong. Please try again." });
+// Handle unknown API endpoints.
+app.use("/api", (req, res) => {
+  res.status(404).json({
+    message: "Not found.",
+  });
 });
 
-// Vercel loads this file directly and needs the Express app itself as the export.
+// Serve the React frontend when running locally.
+const clientDist = path.join(
+  __dirname,
+  "..",
+  "..",
+  "client",
+  "dist"
+);
+
+if (!process.env.VERCEL && fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+}
+
+// Global error handler.
+app.use((error, req, res, next) => {
+  if (error.type === "entity.parse.failed") {
+    return res.status(400).json({
+      message: "Invalid request.",
+    });
+  }
+
+  console.error(error);
+
+  return res.status(500).json({
+    message: "Something went wrong. Please try again.",
+  });
+});
+
+// Export the Express app for Vercel.
 module.exports = app;
 module.exports.connectDB = connectDB;
 module.exports.missingConfig = missingConfig;
